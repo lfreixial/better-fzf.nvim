@@ -36,6 +36,10 @@ vim.opt.number = true
 vim.cmd('runtime plugin/better_fzf.vim')
 require('better_fzf').setup({ extra_fzf_args = { '--no-history' } }) -- deterministic demo
 
+-- <Space>/ : live regex grep (results stream in as you type; <C-g> file type)
+vim.keymap.set('n', '<Space>/', function()
+  require('better_fzf').live_grep({})
+end)
 vim.keymap.set('n', '<leader>fg', function()
   require('better_fzf').grep({})
 end)
@@ -46,7 +50,7 @@ vim.keymap.set('n', '<leader>fw', function()
   require('better_fzf').grep({ pattern = vim.fn.expand('<cword>') })
 end)
 
-print('demo: :BFzf \"hello\" go | :BFzfFile | <leader>fg/ff/fw')
+print('demo: <Space>/ live grep | :BFzf "hello" go | :BFzfFile')
 LUA
 
 cd "$repo/demo/project"

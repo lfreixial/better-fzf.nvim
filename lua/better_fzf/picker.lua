@@ -158,4 +158,179 @@ function M.pick(opts)
   return true
 end
 
+-- ------------------------------------------------ live grep
+
+--- Shell-quote with single quotes (for embedding static values like globs
+-- into the reload command, which fzf runs through `$SHELL -c`).
+local function shq(s)
+  return "'" .. tostring(s):gsub("'", "'\\''") .. "'"
+end
+
+--- rg base flags shared by the reload command and the initial producer.
+local function live_rg_base(o)
+  local argv = { 'rg', '--column', '--no-heading', '--color', 'never' }
+  local case = o.case or 'smart'
+  if case == 'sensitive' then
+    argv[#argv + 1] = '-s'
+  elseif case == 'insensitive' then
+    argv[#argv + 1] = '-i'
+  else
+    argv[#argv + 1] = '-S'
+  end
+  if o.respects_ignore == false then argv[#argv + 1] = '--no-ignore' end
+  if o.hidden then argv[#argv + 1] = '--hidden' end
+  return argv
+end
+
+--- The `change:reload` command string. {q} is left bare: fzf substitutes it
+-- with a single-quoted value (man: "you should not manually add quotes").
+function M.live_reload_cmd(o, globs)
+  local parts = live_rg_base(o)
+  for _, g in ipairs(globs or {}) do
+    parts[#parts + 1] = '-g'
+    parts[#parts + 1] = shq(g)
+  end
+  parts[#parts + 1] = '-e'
+  parts[#parts + 1] = '{q}'
+  parts[#parts + 1] = '.'
+  return table.concat(parts, ' ') .. ' || true'
+end
+
+--- Initial producer argv (rg with the initial query) — pre-populates the list
+-- when re-launching after a file-type change.
+local function live_producer(o, globs, query)
+  local argv = live_rg_base(o)
+  for _, g in ipairs(globs or {}) do
+    argv[#argv + 1] = '-g'
+    argv[#argv + 1] = g
+  end
+  argv[#argv + 1] = '-e'
+  argv[#argv + 1] = query
+  argv[#argv + 1] = '.'
+  return argv
+end
+
+--- Parse fzf output produced with `--print-query --expect ctrl-g`.
+-- line 1 = query, line 2 = completing key ('' = enter), lines 3+ = selection.
+function M.parse_exit(lines)
+  local selection = {}
+  for i = 3, #lines do
+    if lines[i] ~= '' then selection[#selection + 1] = lines[i] end
+  end
+  return { query = lines[1] or '', key = lines[2] or '', selection = selection }
+end
+
+--- Run live grep: the typed query IS the regex; results stream in via
+-- `change:reload`. <C-g> (via --expect) exits and hands the query to
+-- opts.on_filetype so the caller can prompt for a file type and re-launch.
+-- @param o merged config
+-- @param opts { globs?: string[], initial_query?: string,
+--               on_select: fun(lines), on_filetype: fun(query),
+--               on_cancel?: fun(), on_spawn?: fun(job) }
+function M.live_grep(o, opts)
+  if vim.fn.executable('fzf') ~= 1 then
+    vim.notify('better_fzf: fzf not found on $PATH', vim.log.levels.ERROR)
+    return false
+  end
+
+  local out = vim.fn.tempname()
+  local globs = opts.globs or {}
+
+  local fzf = { 'fzf', '--disabled', '--delimiter', ':', '--layout', 'reverse' }
+  local pv = M.context_preview(o.preview_lines)
+  if pv then
+    fzf[#fzf + 1] = '--preview'
+    fzf[#fzf + 1] = pv
+    fzf[#fzf + 1] = '--preview-window'
+    fzf[#fzf + 1] = o.preview_window or 'right,40%'
+  end
+  fzf[#fzf + 1] = '--bind'
+  fzf[#fzf + 1] = 'change:reload:' .. M.live_reload_cmd(o, globs)
+  fzf[#fzf + 1] = '--expect'
+  fzf[#fzf + 1] = 'ctrl-g'
+  fzf[#fzf + 1] = '--print-query'
+  if opts.initial_query and opts.initial_query ~= '' then
+    fzf[#fzf + 1] = '--query'
+    fzf[#fzf + 1] = opts.initial_query
+  end
+  for _, a in ipairs(o.extra_fzf_args or {}) do
+    fzf[#fzf + 1] = a
+  end
+
+  local producer
+  if opts.initial_query and opts.initial_query ~= '' then
+    producer = live_producer(o, globs, opts.initial_query)
+  else
+    producer = { 'true' }
+  end
+
+  local pipeline = esc(producer) .. ' | ' .. esc(fzf) .. ' > ' .. vim.fn.shellescape(out)
+  local buf, win = open_window(o, 'grep (live)')
+  local closed = false
+
+  vim.keymap.set('t', '<Esc><Esc>', function()
+    if not closed then
+      closed = true
+      pcall(api.nvim_win_close, win, true)
+    end
+  end, { buffer = buf, silent = true })
+
+  local job = vim.fn.termopen({ 'bash', '-c', pipeline }, {
+    on_exit = function(_, code)
+      vim.schedule(function()
+        if closed then
+          os.remove(out)
+          return
+        end
+        closed = true
+        if win and api.nvim_win_is_valid(win) then pcall(api.nvim_win_close, win, true) end
+        if code == 0 then
+          local lines = {}
+          local f = io.open(out, 'rb')
+          if f then
+            for l in f:lines() do lines[#lines + 1] = l end
+            f:close()
+          end
+          local parsed = M.parse_exit(lines)
+          if parsed.key == 'ctrl-g' then
+            local q = parsed.query
+            -- Defer: closing a terminal window inside on_exit can leave the
+            -- terminal's exit-mode restoration pending, which steals focus
+            -- from the float we open next. Let teardown finish first.
+            vim.defer_fn(function()
+              pcall(opts.on_filetype, q)
+            end, 120)
+          elseif #parsed.selection == 0 then
+            vim.notify('better_fzf: no matches', vim.log.levels.INFO)
+          else
+            pcall(opts.on_select, parsed.selection)
+          end
+        elseif code == 1 or code == 130 then
+          pcall(opts.on_cancel or function() end)
+        else
+          vim.notify(('better_fzf: fzf exited with %d'):format(code), vim.log.levels.ERROR)
+        end
+        os.remove(out)
+      end)
+    end,
+  })
+
+  if job <= 0 then
+    if api.nvim_win_is_valid(win) then pcall(api.nvim_win_close, win, true) end
+    vim.notify('better_fzf: failed to start terminal job', vim.log.levels.ERROR)
+    return false
+  end
+  if opts.on_spawn then pcall(opts.on_spawn, job) end
+  -- Deferred: when re-launched from a prompt's on_confirm (also a callback),
+  -- a synchronous startinsert can be ignored and fzf never gets the keys.
+  api.nvim_set_current_win(win)
+  vim.schedule(function()
+    if api.nvim_win_is_valid(win) then
+      api.nvim_set_current_win(win)
+      vim.cmd('startinsert')
+    end
+  end)
+  return true
+end
+
 return M

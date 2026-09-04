@@ -9,6 +9,7 @@ An fzf picker that does **regex content search** across your project, scoped to
 :BFzf "hello"               → search "hello" across ALL file types
 :BFzf                       → floating prompt (type pattern, <C-g> file type)
 :BFzfFile go,ts             → pick a file among *.go / *.ts (fuzzy names)
+:BFzfLive                   → live grep — type the regex, results stream in
 ```
 
 No telescope. No fzf-lua. No UI framework. Just ripgrep (`rg`, with a `grep`
@@ -30,8 +31,8 @@ cd better-fzf.nvim
 bash demo/demo.sh
 ```
 
-Inside the demo project, try `:BFzf "hello" go`, `:BFzf TODO go`, `:BFzfFile go`
-or the `<leader>fg/ff/fw` mappings.
+Inside the demo project, try `<Space>/` (live grep), `:BFzf "hello" go`,
+`:BFzf TODO go`, `:BFzfFile go` or the `<leader>fg/ff/fw` mappings.
 
 ## Why "better fzf"
 
@@ -90,6 +91,25 @@ Type tokens are flexible:
 
 **Default is every file type** — types are purely additive narrowing.
 
+### Live grep
+
+`:BFzfLive` (or map `<Space>/` to it) is a Telescope-style live grep: the
+**typed query is the regex** and results stream in as you type. No file-type
+prompt up front — every file type is searched by default.
+
+- Type → results update live (regex)
+- `Enter` → jump to the match; `Tab` + `Enter` → all selected to quickfix
+- `<C-g>` → set the **file type** (`go`, `go,ts`, `!*_test.go`, …) and re-scope
+- `Esc` / `Ctrl-C` → cancel
+
+Needs ripgrep (the live `reload` runs `rg`).
+
+```lua
+bf.live_grep({})                         -- type to search
+bf.live_grep({ initial_query = 'hello' }) -- pre-filled query
+bf.live_grep({ types = 'go' })            -- scoped from the start
+```
+
 ### In the prompt window
 
 Running `:BFzf` bare (or `bf.grep({})` / `<leader>fg`) opens a floating prompt
@@ -122,6 +142,9 @@ bf.grep({ pattern = 'hello', types = { 'go', 'ts' } })
 
 -- straight to quickfix, no fzf required
 bf.grep({ pattern = 'TODO', driver = 'qf' })
+
+-- live grep: type the regex, results stream in
+bf.live_grep({})
 
 -- file picker
 bf.files({ types = 'go' })
@@ -156,7 +179,9 @@ require('better_fzf').setup({
 
 ```lua
 local bf = require('better_fzf')
-vim.keymap.set('n', '<leader>fg', function() bf.grep({}) end) -- opens the floating prompt
+-- live grep: type the regex, results stream in
+vim.keymap.set('n', '<Space>/', function() bf.live_grep({}) end)
+vim.keymap.set('n', '<leader>fg', function() bf.grep({}) end) -- floating prompt
 vim.keymap.set('n', '<leader>ff', function() bf.files({}) end)
 -- grep the word under the cursor (as a regex)
 vim.keymap.set('n', '<leader>fw', function()
@@ -191,7 +216,6 @@ both on every push.
 
 ## Roadmap
 
-- Live query → regex re-run (rg --json streaming as you type)
 - `--no-ignore` / hidden / literal toggles bound inside the picker
 - File picker preview via `bat`
 - Windows support (currently assumes a POSIX shell for the fzf pipeline)

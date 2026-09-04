@@ -203,5 +203,20 @@ input_mod.prompt({ cfg = { width = 0.6 }, pattern = true, type = true,
 handle2.cancel()
 t('input: cancel fires on_cancel', cancelled)
 
+-- ---------- 15. live grep helpers ----------
+local pv_mod = require('better_fzf.picker')
+local e = pv_mod.parse_exit({ 'hello', '', 'a.go:1:1:x' })
+t('live: parse_exit (enter)',
+  e.query == 'hello' and e.key == '' and #e.selection == 1 and e.selection[1] == 'a.go:1:1:x', vim.inspect(e))
+local e2 = pv_mod.parse_exit({ 'hello', 'ctrl-g' })
+t('live: parse_exit (ctrl-g)',
+  e2.query == 'hello' and e2.key == 'ctrl-g' and #e2.selection == 0, vim.inspect(e2))
+local rc = pv_mod.live_reload_cmd({ case = 'smart' }, { '*.go' })
+t('live: reload cmd bare {q}', rc:find('-e {q}', 1, true) ~= nil and not rc:find("'{q}'", 1, true), rc)
+t('live: reload cmd quotes glob', rc:find("-g '*.go'", 1, true) ~= nil, rc)
+t('live: reload cmd || true', rc:find('|| true', 1, true) ~= nil, rc)
+local rc2 = pv_mod.live_reload_cmd({ case = 'smart' }, {})
+t('live: reload cmd no globs', not rc2:find('-g', 1, true), rc2)
+
 io.write(('RESULT %s\n'):format(fails == 0 and 'ALL PASS' or (fails .. ' FAILURE(S)')))
 os.exit(fails == 0 and 0 or 1)

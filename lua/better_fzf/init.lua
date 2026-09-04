@@ -231,6 +231,48 @@ function M.grep(opts)
   do_grep(o, o.pattern, o.types)
 end
 
+--- Live grep: the typed query IS the regex; results stream in via fzf `reload`.
+-- File type: <C-g> inside the picker opens a file-type prompt and re-launches.
+-- opts: { types?, initial_query?, literal?, case?, driver?, ... }
+function M.live_grep(opts)
+  local o = vim.tbl_deep_extend('force', cfg, opts or {})
+  if vim.fn.executable('rg') ~= 1 then
+    vim.notify('better_fzf: live grep needs ripgrep (rg)', vim.log.levels.ERROR)
+    return
+  end
+
+  local function run(query, globs)
+    picker.live_grep(o, {
+      globs = globs,
+      initial_query = query,
+      on_select = function(lines)
+        on_grep_lines(lines, o, 'rg')
+      end,
+      on_filetype = function(q)
+        input.prompt({
+          cfg = { width = o.prompt_width, border = o.border },
+          type = true,
+          on_confirm = function(v)
+            run(q, backend.parse_types(v.type))
+          end,
+          on_cancel = function()
+            run(q, globs) -- reopen unchanged
+          end,
+        })
+      end,
+      on_cancel = function()
+        vim.notify('better_fzf: cancelled', vim.log.levels.INFO)
+      end,
+    })
+  end
+
+  local globs = backend.parse_types(o.types)
+  if #globs == 0 and o.default_types then
+    globs = backend.parse_types(o.default_types)
+  end
+  run(o.initial_query, globs)
+end
+
 -- ------------------------------------------------ file picker
 
 --- Pick a file (fuzzy by name). types scope the file set; default = all.
@@ -307,6 +349,8 @@ local COMMANDS = {
   BfzfGrep = { fn = 'cmd', desc = 'Alias of BFzf' },
   BetterFzfFile = { fn = 'file_cmd', desc = 'Fuzzy file picker; optional file types' },
   BFzfFile = { fn = 'file_cmd', desc = 'Fuzzy file picker; optional file types' },
+  BetterFzfLive = { fn = 'live_cmd', desc = 'Live regex-grep (results update as you type)' },
+  BFzfLive = { fn = 'live_cmd', desc = 'Live regex-grep (results update as you type)' },
 }
 
 local registered = false
@@ -354,6 +398,25 @@ function M.file_cmd(raw)
   else
     M.files({})
   end
+end
+
+--- :BFzfLive [initial_query] [types...]
+function M.live_cmd(raw)
+  local tokens = parse_cli(raw)
+  if #tokens == 0 then
+    M.live_grep({})
+    return
+  end
+  local initial = tokens[1]
+  local types
+  if #tokens > 1 then
+    local rest = {}
+    for i = 2, #tokens do
+      rest[#rest + 1] = tokens[i]
+    end
+    types = table.concat(rest, ',')
+  end
+  M.live_grep({ initial_query = initial, types = types })
 end
 
 M.register_commands()

@@ -108,7 +108,16 @@ function M.prompt(opts)
     opts.on_ready({ switch = switch_field, confirm = confirm, cancel = cancel, buf = buf, win = win })
   end
 
-  vim.cmd('startinsert')
+  -- Enter insert mode. Deferred: when opened from a terminal job's on_exit
+  -- (e.g. live-grep <C-g>), a synchronous startinsert can be ignored, leaving
+  -- the float stuck in normal mode.
+  api.nvim_set_current_win(win)
+  vim.schedule(function()
+    if api.nvim_win_is_valid(win) then
+      api.nvim_set_current_win(win)
+      vim.cmd('startinsert')
+    end
+  end)
   return win, buf
 end
 

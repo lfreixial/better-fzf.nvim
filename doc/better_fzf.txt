@@ -51,6 +51,11 @@ Install (lazy.nvim):
 :BfzfGrep [pattern] [types...]
     Alias for :BFzf.
 
+                                                        *:BFzfLive* *:BetterFzfLive*
+:BFzfLive [initial_query] [types...]
+    Live regex-grep: the typed query IS the regex and results stream in as
+    you type. <C-g> sets the file type (re-launches scoped). Needs ripgrep.
+
 ==============================================================================
 3. OPTIONS                                                *better-fzf-options*
 
@@ -91,6 +96,7 @@ Configure with `require('better_fzf').setup({ ... })`. All keys optional.
 <
     Keymap suggestion:
 >
+    vim.keymap.set('n', '<Space>/', function() require('better_fzf').live_grep({}) end)
     vim.keymap.set('n', '<leader>fg', function() require('better_fzf').grep({}) end)
     vim.keymap.set('n', '<leader>ff', function() require('better_fzf').files({}) end)
 <
@@ -103,6 +109,15 @@ In the floating prompt (insert mode):
     <C-g>           toggle to the file-type field
     <CR>            run the search
     <Esc>           cancel
+<
+
+In the live-grep picker (:BFzfLive / <Space>/):
+>
+    typing          regex search (results update live)
+    <CR>            jump to the match
+    <Tab>           multi-select; <CR> sends all to the quickfix list
+    <C-g>           set the file type (re-launches scoped)
+    <Esc> <C-c>     cancel
 <
 
 Inside the picker (fzf owns the terminal):
