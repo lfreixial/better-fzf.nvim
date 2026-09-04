@@ -38,7 +38,7 @@ Install (lazy.nvim):
       :BFzf "hello" go            "hello" in *.go files (regex)
       :BFzf "func .*Error" ts,go  regex across Go + TypeScript
       :BFzf "hello"               "hello" across ALL file types
-      :BFzf                       prompt for pattern, then types (Enter = all)
+      :BFzf                       floating prompt (pattern, <C-g> file type)
 <
     Type tokens: `go` -> `*.go`, `*.go` / `src/**` -> literal glob,
     `!*_test.go` -> exclusion, comma/space separated.
@@ -97,6 +97,13 @@ Configure with `require('better_fzf').setup({ ... })`. All keys optional.
 
 ==============================================================================
 5. KEYS                                                    *better-fzf-keys*
+
+In the floating prompt (insert mode):
+>
+    <C-g>           toggle to the file-type field
+    <CR>            run the search
+    <Esc>           cancel
+<
 
 Inside the picker (fzf owns the terminal):
 >

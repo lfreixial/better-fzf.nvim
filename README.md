@@ -7,7 +7,7 @@ An fzf picker that does **regex content search** across your project, scoped to
 :BFzf "hello" go            → regex "hello" in *.go files
 :BFzf "func .*Error" ts,go  → regex across Go + TypeScript files
 :BFzf "hello"               → search "hello" across ALL file types
-:BFzf                       → prompt for pattern, then types (Enter = all)
+:BFzf                       → floating prompt (type pattern, <C-g> file type)
 :BFzfFile go,ts             → pick a file among *.go / *.ts (fuzzy names)
 ```
 
@@ -76,7 +76,7 @@ repo and call `require('better_fzf').setup({})` in your config — or skip
 | `:BFzf "hello world" go` | regex `hello world` in `*.go` |
 | `:BFzf "^func " go,!*_test.go` | anchored regex, test files excluded |
 | `:BFzf hello` | regex `hello`, all file types |
-| `:BFzf` | prompts for pattern, then file types (Enter = all) |
+| `:BFzf` | floating prompt — type the pattern, `<C-g>` for file type, `<CR>` to run |
 | `:BFzf "struct .*Error"` | pattern only → all files |
 | `:BFzfFile` | pick a file (fuzzy), all files |
 | `:BFzfFile go,ts,rs` | pick a file among those types |
@@ -89,6 +89,15 @@ Type tokens are flexible:
 - `go, ts, !vendor/**` → comma/space separated list, mixed
 
 **Default is every file type** — types are purely additive narrowing.
+
+### In the prompt window
+
+Running `:BFzf` bare (or `bf.grep({})` / `<leader>fg`) opens a floating prompt
+instead of a bottom-of-screen input:
+
+- Type the regex, `<CR>` to search — skip the file type and it defaults to **all** file types
+- `<C-g>` toggles to the **file type** field (`go`, `go,ts`, `!*_test.go`, …); `<CR>` runs with it — no separate "file types" prompt
+- `<Esc>` cancels
 
 ### In the picker
 
@@ -131,6 +140,7 @@ require('better_fzf').setup({
   layout = 'float',          -- 'float' | 'split'
   width = 0.9,               -- float size (fractions of the editor)
   height = 0.6,
+  prompt_width = 0.6,        -- floating prompt width (fraction of columns)
   border = 'rounded',
   preview_lines = 3,         -- context lines above/below a match (0 = off)
   preview_window = 'right,40%',
@@ -146,7 +156,7 @@ require('better_fzf').setup({
 
 ```lua
 local bf = require('better_fzf')
-vim.keymap.set('n', '<leader>fg', function() bf.grep({}) end)
+vim.keymap.set('n', '<leader>fg', function() bf.grep({}) end) -- opens the floating prompt
 vim.keymap.set('n', '<leader>ff', function() bf.files({}) end)
 -- grep the word under the cursor (as a regex)
 vim.keymap.set('n', '<leader>fw', function()

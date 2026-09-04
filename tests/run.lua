@@ -170,8 +170,8 @@ vim.cmd('BFzfFile go,ts')
 t('cmd: BFzfFile types',
   captured[5] and captured[5].types == 'go,ts', vim.inspect(captured[5]))
 vim.cmd('BFzf')
-t('cmd: bare BFzf prompts for pattern',
-  captured[6] and captured[6].prompt_types == true, vim.inspect(captured[6]))
+t('cmd: bare BFzf opens prompt (no pattern arg)',
+  captured[6] and captured[6].pattern == nil, vim.inspect(captured[6]))
 
 bf.grep, bf.files = real_grep, real_files
 
@@ -182,6 +182,26 @@ local picker_mod = require('better_fzf.picker')
 local pv = picker_mod.context_preview(3) or ''
 t('preview: placeholder not double-quoted',
   not pv:find('"{1}"') and not pv:find('"{2}"') and pv:find('{1}') ~= nil, pv)
+
+-- ---------- 14. floating prompt window ----------
+local input_mod = require('better_fzf.input')
+local got, handle = nil, nil
+input_mod.prompt({ cfg = { width = 0.6 }, pattern = true, type = true,
+  on_ready = function(h) handle = h end,
+  on_confirm = function(v) got = v end })
+vim.api.nvim_buf_set_lines(handle.buf, 0, -1, false, { 'hello' })
+handle.switch() -- commits pattern='hello', moves to file-type field
+vim.api.nvim_buf_set_lines(handle.buf, 0, -1, false, { 'go' })
+handle.confirm() -- commits type='go', fires on_confirm
+t('input: pattern + <C-g> file type captured',
+  got and got.pattern == 'hello' and got.type == 'go', vim.inspect(got))
+
+local cancelled, handle2 = false, nil
+input_mod.prompt({ cfg = { width = 0.6 }, pattern = true, type = true,
+  on_ready = function(h) handle2 = h end,
+  on_cancel = function() cancelled = true end })
+handle2.cancel()
+t('input: cancel fires on_cancel', cancelled)
 
 io.write(('RESULT %s\n'):format(fails == 0 and 'ALL PASS' or (fails .. ' FAILURE(S)')))
 os.exit(fails == 0 and 0 or 1)

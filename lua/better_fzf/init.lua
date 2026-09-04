@@ -3,7 +3,7 @@
 --   :BFzf "hello" go            find "hello" in *.go files (regex)
 --   :BFzf "func .*Error" ts,go  regex across Go + TypeScript files
 --   :BFzf "hello"               search "hello" across ALL file types
---   :BFzf                       prompt for pattern, then file types (Enter = all)
+--   :BFzf                       floating prompt: type pattern, <C-g> file type
 --   :BFzfFile go,ts             pick a file from *.go and *.ts (fuzzy)
 --
 -- Lua API:
@@ -13,6 +13,7 @@
 
 local backend = require('better_fzf.backend')
 local picker = require('better_fzf.picker')
+local input = require('better_fzf.input')
 local api = vim.api
 
 local M = {}
@@ -25,8 +26,9 @@ local DEFAULTS = {
   respects_ignore = true, -- rg honours .gitignore/.ignore
   hidden = false, -- include hidden files
   layout = 'float', -- "float" | "split"
-  width = 0.9, -- float width as fraction of columns
-  height = 0.6, -- height as fraction of lines
+  width = 0.9, -- float width as fraction of columns (fzf picker)
+  height = 0.6, -- height as fraction of lines (fzf picker)
+  prompt_width = 0.6, -- floating prompt width (fraction of columns)
   border = 'rounded',
   preview_lines = 3, -- context lines shown above/below a match (0 = off)
   preview_window = 'right,40%',
@@ -98,13 +100,6 @@ local function parse_cli(raw)
   return out
 end
 
---- vim.fn.input wrapper that returns '' on <Esc>.
-local function prompt(question, default)
-  local ok, res = pcall(vim.fn.input, { prompt = question, default = default or '' })
-  if not ok or res == nil then return '' end
-  return res
-end
-
 local OPEN_CMDS = { edit = 'edit', split = 'split', vsplit = 'vsplit', tabedit = 'tabedit' }
 
 local function open_cmd(how)
@@ -150,26 +145,15 @@ end
 
 -- ------------------------------------------------ grep
 
---- Grep content. opts: { pattern?, types?, prompt_types?, literal?, case?, driver?, ... }
-function M.grep(opts)
-  local o = vim.tbl_deep_extend('force', cfg, opts or {})
-
-  if type(o.pattern) ~= 'string' or o.pattern == '' then
-    o.pattern = prompt('Search pattern (regex): ')
-    if o.pattern == '' then return end
-  end
-
-  local globs = backend.parse_types(o.types)
+--- Run the actual grep given an already-resolved pattern + types.
+local function do_grep(o, pattern, types)
+  local globs = backend.parse_types(types)
   if #globs == 0 and o.default_types then
     globs = backend.parse_types(o.default_types)
   end
-  if #globs == 0 and o.prompt_types then
-    local raw = prompt('File types (comma-sep, empty = all): ')
-    if raw ~= '' then globs = backend.parse_types(raw) end
-  end
 
   local search = {
-    pattern = o.pattern,
+    pattern = pattern,
     globs = globs,
     literal = o.literal,
     case = o.case,
@@ -208,7 +192,7 @@ function M.grep(opts)
   picker.pick({
     argv = argv,
     cfg = o,
-    title = ('grep: %s'):format(o.pattern),
+    title = ('grep: %s'):format(pattern),
     preview = picker.context_preview(o.preview_lines),
     delimiter = ':',
     on_spawn = o.on_spawn,
@@ -219,6 +203,32 @@ function M.grep(opts)
       vim.notify('better_fzf: cancelled', vim.log.levels.INFO)
     end,
   })
+end
+
+--- Grep content.
+-- If no pattern is given, opens a floating prompt (pattern + optional file
+-- type via <C-g>). No separate "file types" prompt — that's the <C-g> field.
+-- opts: { pattern?, types?, literal?, case?, driver?, ... }
+function M.grep(opts)
+  local o = vim.tbl_deep_extend('force', cfg, opts or {})
+
+  if type(o.pattern) ~= 'string' or o.pattern == '' then
+    input.prompt({
+      cfg = { width = o.prompt_width, border = o.border },
+      pattern = true,
+      type = true,
+      on_confirm = function(v)
+        if (v.pattern or '') == '' then
+          vim.notify('better_fzf: pattern required', vim.log.levels.WARN)
+          return
+        end
+        do_grep(o, v.pattern, v.type)
+      end,
+    })
+    return
+  end
+
+  do_grep(o, o.pattern, o.types)
 end
 
 -- ------------------------------------------------ file picker
@@ -321,7 +331,7 @@ end
 function M.cmd(raw)
   local tokens = parse_cli(raw)
   if #tokens == 0 then
-    M.grep({ prompt_types = true })
+    M.grep({}) -- floating prompt (pattern + optional file type)
     return
   end
   local pattern = tokens[1]
