@@ -146,10 +146,42 @@ t('files: go globs', #fl == 2 and (fl[1]:find('hello%.go') or fl[2]:find('hello%
 local fall = vim.fn.systemlist(backend.files_argv({ globs = {} }))
 t('files: all (ignores respected)', #fall == 7, #fall)
 
--- ---------- 12. cmd tokenizer ----------
-local t1 = require('better_fzf')
--- parse_cli is internal; exercise through a spy-free path: grep prompts when
--- pattern is missing, so instead validate quoting via cmd-level parsing only
--- if exposed. Skip internal; indirectly verified in PTY test.
+-- ---------- 12. user-command arg handling (quotes must survive) ----------
+-- Regression: legacy `command!` defs stripped double-quoted args as comments,
+-- so `:BFzf "hello" go` used to run bare. Lua-registered commands keep args.
+local captured = {}
+local real_grep, real_files = bf.grep, bf.files
+bf.grep = function(o) captured[#captured + 1] = o end
+bf.files = function(o) captured[#captured + 1] = o end
+
+vim.cmd('BFzf "hello" go')
+t('cmd: double-quoted pattern + types',
+  captured[1] and captured[1].pattern == 'hello' and captured[1].types == 'go', vim.inspect(captured[1]))
+vim.cmd('BFzf "hello world" go')
+t('cmd: double-quoted multi-word pattern',
+  captured[2] and captured[2].pattern == 'hello world' and captured[2].types == 'go', vim.inspect(captured[2]))
+vim.cmd("BFzf 'hello world' go")
+t('cmd: single-quoted multi-word pattern',
+  captured[3] and captured[3].pattern == 'hello world' and captured[3].types == 'go', vim.inspect(captured[3]))
+vim.cmd('BFzf hello go')
+t('cmd: unquoted pattern + types',
+  captured[4] and captured[4].pattern == 'hello' and captured[4].types == 'go', vim.inspect(captured[4]))
+vim.cmd('BFzfFile go,ts')
+t('cmd: BFzfFile types',
+  captured[5] and captured[5].types == 'go,ts', vim.inspect(captured[5]))
+vim.cmd('BFzf')
+t('cmd: bare BFzf prompts for pattern',
+  captured[6] and captured[6].prompt_types == true, vim.inspect(captured[6]))
+
+bf.grep, bf.files = real_grep, real_files
+
+-- ---------- 13. preview template regression ----------
+-- fzf replaces {1}/{2} with single-quoted values; wrapping them in extra
+-- quotes ({1} inside "...") breaks the preview file open (literal quotes).
+local picker_mod = require('better_fzf.picker')
+local pv = picker_mod.context_preview(3) or ''
+t('preview: placeholder not double-quoted',
+  not pv:find('"{1}"') and not pv:find('"{2}"') and pv:find('{1}') ~= nil, pv)
+
 io.write(('RESULT %s\n'):format(fails == 0 and 'ALL PASS' or (fails .. ' FAILURE(S)')))
 os.exit(fails == 0 and 0 or 1)

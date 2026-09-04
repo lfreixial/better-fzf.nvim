@@ -268,7 +268,7 @@ function M.files(opts)
     return
   end
 
-  local preview = o.file_preview and ('head -n %d "{}"'):format(math.max(o.preview_lines, 1) * 4) or nil
+  local preview = o.file_preview and ('head -n %d {}'):format(math.max(o.preview_lines, 1) * 4) or nil
   picker.pick({
     argv = argv,
     cfg = o,
@@ -290,6 +290,32 @@ function M.files(opts)
 end
 
 -- ------------------------------------------------ commands
+
+local COMMANDS = {
+  BetterFzf = { fn = 'cmd', desc = 'Regex-grep with fzf; optional file types' },
+  BFzf = { fn = 'cmd', desc = 'Regex-grep with fzf; optional file types' },
+  BfzfGrep = { fn = 'cmd', desc = 'Alias of BFzf' },
+  BetterFzfFile = { fn = 'file_cmd', desc = 'Fuzzy file picker; optional file types' },
+  BFzfFile = { fn = 'file_cmd', desc = 'Fuzzy file picker; optional file types' },
+}
+
+local registered = false
+
+--- Register :BFzf / :BFzfFile user commands (idempotent).
+-- Registered via nvim_create_user_command so double-quoted patterns survive:
+-- legacy `command!` defs treat `"` in args as a comment and drop them.
+-- Any pre-existing placeholder (e.g. lazy.nvim cmd stubs) is replaced.
+function M.register_commands()
+  if registered then return M end
+  registered = true
+  for name, spec in pairs(COMMANDS) do
+    pcall(vim.api.nvim_del_user_command, name)
+    vim.api.nvim_create_user_command(name, function(a)
+      M[spec.fn](a.args)
+    end, { nargs = '*', desc = 'better-fzf.nvim: ' .. spec.desc })
+  end
+  return M
+end
 
 --- :BFzf [pattern] [types...]
 function M.cmd(raw)
@@ -319,5 +345,7 @@ function M.file_cmd(raw)
     M.files({})
   end
 end
+
+M.register_commands()
 
 return M

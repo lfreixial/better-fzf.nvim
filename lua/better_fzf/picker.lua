@@ -75,12 +75,14 @@ end
 
 --- Context preview for grep rows. awk prints ±ctx lines with numbers and
 -- clamps near BOF (sed -n "-2,4p" errors on early matches; awk doesn't).
--- {2} = line number, {1} = file path (fzf placeholders, substituted raw).
+-- {2} = line number, {1} = file path (fzf placeholders).
+-- NOTE: fzf already substitutes placeholders with single-quoted values, so do
+-- NOT wrap them in extra quotes here: "{1}" would hand awk literal quote chars.
 -- @return string|nil  preview command, nil when ctx <= 0
 function M.context_preview(ctx)
   local n = tonumber(ctx) or 3
   if n <= 0 then return nil end
-  return ('awk -v ln={2} -v ctx=%d "NR>=ln-ctx && NR<=ln+ctx {print NR \\"  \\" \\$0}" "{1}"'):format(n)
+  return ('awk -v ln={2} -v ctx=%d "NR>=ln-ctx && NR<=ln+ctx {print NR \\"  \\" \\$0}" {1}'):format(n)
 end
 
 --- Run an interactive fzf pick over a producer argv.

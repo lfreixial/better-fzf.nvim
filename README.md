@@ -16,6 +16,23 @@ fallback) piped into fzf, plus a quickfix fallback for machines without fzf.
 
 ![CI](https://github.com/lfreixial/better-fzf.nvim/workflows/CI/badge.svg)
 
+## Demo
+
+![better-fzf.nvim demo](demo/better-fzf-demo.gif)
+
+Try it yourself in ~10 seconds — the demo uses an isolated config in a
+throwaway dir, so nothing on your machine is touched (needs `nvim` + `rg`;
+`fzf` optional, results fall back to quickfix without it):
+
+```sh
+git clone https://github.com/lfreixial/better-fzf.nvim
+cd better-fzf.nvim
+bash demo/demo.sh
+```
+
+Inside the demo project, try `:BFzf "hello" go`, `:BFzf TODO go`, `:BFzfFile go`
+or the `<leader>fg/ff/fw` mappings.
+
 ## Why "better fzf"
 
 Plain `fzf` fuzzy-matches *filenames* but can't regex-search *file contents*.
