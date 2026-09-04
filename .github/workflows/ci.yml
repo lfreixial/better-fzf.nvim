@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Neovim
+        uses: rhysd/action-setup-vim@v1
+        with:
+          neovim: true
+          version: stable
+
+      - name: Install ripgrep + fzf
+        run: sudo apt-get update && sudo apt-get install -y ripgrep fzf
+
+      - name: Unit tests (backends, scoping, parsing, quickfix)
+        run: nvim --headless -u NONE -l tests/run.lua
+        env:
+          BFZF_REPO: ${{ github.workspace }}
+          BFZF_FIXTURE: ${{ github.workspace }}/tests/fixture
+
+      - name: E2E test (drives the real fzf UI)
+        run: nvim --headless -u NONE -l tests/e2e_fzf.lua
+        env:
+          TERM: xterm-256color
+          BFZF_REPO: ${{ github.workspace }}
+          BFZF_FIXTURE: ${{ github.workspace }}/tests/fixture

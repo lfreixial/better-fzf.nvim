@@ -1,0 +1,110 @@
+*better-fzf.nvim.txt*  fzf + regex grep + file-type scoping
+
+==============================================================================
+CONTENTS                                                    *better-fzf*
+
+  1. Intro ........................ |better-fzf-intro|
+  2. Commands ...................... |better-fzf-commands|
+  3. Options ....................... |better-fzf-options|
+  4. Lua API ....................... |better-fzf-lua|
+  5. Keys .......................... |better-fzf-keys|
+
+==============================================================================
+1. INTRO                                                     *better-fzf-intro*
+
+better-fzf.nvim layers ripgrep's regex search under an fzf picker, with
+file-type scoping. No telescope or fzf-lua dependency. Falls back to the
+quickfix list when fzf is absent.
+
+Requirements:
+  - Neovim >= 0.9
+  - ripgrep (recommended; plain grep is used automatically if missing)
+  - fzf on $PATH (optional; without it results go to the quickfix list)
+
+Install (lazy.nvim):
+>
+    { 'lfreixial/better-fzf.nvim', cmd = { 'BFzf', 'BFzfFile' } }
+<
+
+==============================================================================
+2. COMMANDS                                                *better-fzf-commands*
+
+                                                             *:BFzf* *:BetterFzf*
+:BFzf [pattern] [types...]
+    Regex-search file contents and open matches in an fzf picker.
+
+    Examples:
+>
+      :BFzf "hello" go            "hello" in *.go files (regex)
+      :BFzf "func .*Error" ts,go  regex across Go + TypeScript
+      :BFzf "hello"               "hello" across ALL file types
+      :BFzf                       prompt for pattern, then types (Enter = all)
+<
+    Type tokens: `go` -> `*.go`, `*.go` / `src/**` -> literal glob,
+    `!*_test.go` -> exclusion, comma/space separated.
+
+                                                          *:BFzfFile* *:BetterFzfFile*
+:BFzfFile [types...]
+    Fuzzy-pick a file (by name) among the given types. No types = all files.
+
+                                                          *:BfzfGrep*
+:BfzfGrep [pattern] [types...]
+    Alias for :BFzf.
+
+==============================================================================
+3. OPTIONS                                                *better-fzf-options*
+
+Configure with `require('better_fzf').setup({ ... })`. All keys optional.
+>
+    require('better_fzf').setup({
+      backend        = 'auto',      -- 'auto' | 'rg' | 'grep'
+      case           = 'smart',     -- 'smart' | 'sensitive' | 'insensitive'
+      default_types  = nil,         -- e.g. { 'go' } when none given (nil = all)
+      literal        = false,       -- true = fixed string, not regex
+      respects_ignore = true,       -- rg honours .gitignore / .ignore
+      hidden         = false,       -- also search hidden files
+      layout         = 'float',     -- 'float' | 'split'
+      width          = 0.9,         -- float size (fraction of columns)
+      height         = 0.6,         -- height (fraction of lines)
+      border         = 'rounded',
+      preview_lines  = 3,           -- context lines around a match (0 = off)
+      preview_window = 'right,40%',
+      extra_fzf_args = {},          -- e.g. { '--no-multi' }
+      driver         = 'auto',      -- 'auto' | 'fzf' | 'qf'
+      open           = 'edit',      -- 'edit' | 'split' | 'vsplit' | 'tabedit'
+      center         = true,        -- zz after jumping to a match
+      file_preview   = false,       -- preview pane in :BFzfFile
+    })
+<
+
+==============================================================================
+4. LUA API                                                  *better-fzf-lua*
+
+>
+    local bf = require('better_fzf')
+
+    bf.setup({ case = 'sensitive' })          -- global defaults
+
+    bf.grep({ pattern = 'hello', types = { 'go', 'ts' } })
+    bf.grep({ pattern = 'TODO', driver = 'qf' })  -- straight to quickfix
+    bf.files({ types = 'go' })
+<
+    Keymap suggestion:
+>
+    vim.keymap.set('n', '<leader>fg', function() require('better_fzf').grep({}) end)
+    vim.keymap.set('n', '<leader>ff', function() require('better_fzf').files({}) end)
+<
+
+==============================================================================
+5. KEYS                                                    *better-fzf-keys*
+
+Inside the picker (fzf owns the terminal):
+>
+    <CR>            jump to the match (cursor on the exact match column)
+    <Tab>           multi-select; <CR> then sends all to the quickfix list
+    <C-c> <C-g>     cancel
+    <Esc><Esc>      force-close the picker window
+    typing          fuzzy-narrows the rg results
+<
+
+ vim:tw=78:ts=8:noet:ft=help:norl:
